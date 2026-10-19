@@ -9,6 +9,7 @@ import asyncio
 import json
 import logging
 import os
+import re
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from importlib.resources import files
@@ -29,10 +30,13 @@ from pydantic import BaseModel, Field, model_validator
 _LOGGER = logging.getLogger(__name__)
 
 KEEPALIVE_SECONDS = 15.0
+_HOST_RE = re.compile(r"[A-Za-z0-9.\-:\[\]]+")
 
 
 class HubClient(Protocol):
     """The slice of LibreSyncClient this service uses; tests supply a fake."""
+
+    host: str
 
     @property
     def state(self) -> DeviceState: ...
@@ -102,6 +106,11 @@ def state_to_dict(state: DeviceState) -> dict[str, Any]:
     }
 
 
+def snapshot(hub: "HubClient", state: DeviceState | None = None) -> dict[str, Any]:
+    """The state as JSON, plus the address the service is talking to."""
+    return state_to_dict(state if state is not None else hub.state) | {"host": hub.host}
+
+
 def _find_source_index(state: DeviceState, name_or_index: str) -> int:
     """Match a source by case-insensitive name, falling back to a numeric index."""
     wanted = name_or_index.strip().casefold()
@@ -125,7 +134,28 @@ async def _build_client() -> LibreSyncClient:
             )
         host = found[0].host
         _LOGGER.info("discovered hub %s at %s", found[0].name, host)
+    elif not _HOST_RE.fullmatch(host):
+        raise RuntimeError(f"STEREO_HUB_HOST={host!r} is not a hostname or IP address")
     return LibreSyncClient(host)
+
+
+def _log_availability(hub: "HubClient") -> Callable[[DeviceState], None]:
+    """Log each change of connection state, which is otherwise invisible."""
+    last: list[bool | None] = [None]
+
+    def on_state(state: DeviceState) -> None:
+        if state.available == last[0]:
+            return
+        last[0] = state.available
+        if state.available:
+            _LOGGER.info("connected to hub at %s", hub.host)
+        else:
+            _LOGGER.warning(
+                "hub at %s not reachable on TCP 50006 and 7777; retrying in the background",
+                hub.host,
+            )
+
+    return on_state
 
 
 # --- app ------------------------------------------------------------------
@@ -135,6 +165,8 @@ def create_app(client: HubClient | None = None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         hub: HubClient = client if client is not None else await _build_client()
+        _LOGGER.info("connecting to hub at %s", hub.host)
+        unsubscribe = hub.subscribe(_log_availability(hub))
         # No timeout: the service comes up even while the hub is unreachable,
         # and the client reconnects by itself. `available` reports which.
         await hub.async_connect()
@@ -142,6 +174,7 @@ def create_app(client: HubClient | None = None) -> FastAPI:
         try:
             yield
         finally:
+            unsubscribe()
             await hub.async_disconnect()
 
     app = FastAPI(title="Stereo Hub", version="0.1.0", lifespan=lifespan)
@@ -169,32 +202,33 @@ def create_app(client: HubClient | None = None) -> FastAPI:
 
     @app.get("/healthz")
     async def healthz(request: Request) -> dict[str, Any]:
-        return {"status": "ok", "hub_available": hub_of(request).state.available}
+        hub = hub_of(request)
+        return {"status": "ok", "hub_host": hub.host, "hub_available": hub.state.available}
 
     # --- REST API -----------------------------------------------------
 
     @app.get("/api/state")
     async def get_state(request: Request) -> dict[str, Any]:
-        return state_to_dict(hub_of(request).state)
+        return snapshot(hub_of(request))
 
     @app.put("/api/power")
     async def put_power(request: Request, body: PowerBody) -> dict[str, Any]:
         hub = hub_of(request)
         await hub.async_set_power(body.on)
-        return state_to_dict(hub.state)
+        return snapshot(hub)
 
     @app.put("/api/volume")
     async def put_volume(request: Request, body: VolumeBody) -> dict[str, Any]:
         hub = hub_of(request)
         await hub.async_set_volume(body.level)
-        return state_to_dict(hub.state)
+        return snapshot(hub)
 
     @app.put("/api/source")
     async def put_source(request: Request, body: SourceBody) -> dict[str, Any]:
         hub = hub_of(request)
         index = body.index if body.index is not None else _find_source_index(hub.state, body.name or "")
         await hub.async_select_source(index)
-        return state_to_dict(hub.state)
+        return snapshot(hub)
 
     @app.post("/api/media/{action}")
     async def post_media(
@@ -209,7 +243,7 @@ def create_app(client: HubClient | None = None) -> FastAPI:
             "previous": hub.async_media_previous_track,
         }
         await commands[action]()
-        return state_to_dict(hub.state)
+        return snapshot(hub)
 
     @app.get("/api/events")
     async def events(request: Request) -> StreamingResponse:
@@ -227,14 +261,14 @@ def create_app(client: HubClient | None = None) -> FastAPI:
         async def stream() -> AsyncIterator[str]:
             unsubscribe = hub.subscribe(push)
             try:
-                yield f"data: {json.dumps(state_to_dict(hub.state))}\n\n"
+                yield f"data: {json.dumps(snapshot(hub))}\n\n"
                 while not await request.is_disconnected():
                     try:
                         state = await asyncio.wait_for(queue.get(), KEEPALIVE_SECONDS)
                     except TimeoutError:
                         yield ": keepalive\n\n"
                         continue
-                    yield f"data: {json.dumps(state_to_dict(state))}\n\n"
+                    yield f"data: {json.dumps(snapshot(hub, state))}\n\n"
             finally:
                 unsubscribe()
 
@@ -259,7 +293,7 @@ def create_app(client: HubClient | None = None) -> FastAPI:
             index = _find_source_index(hub.state, source)
             if hub.state.source is None or hub.state.source.index != index:
                 await hub.async_select_source(index)
-        return state_to_dict(hub.state)
+        return snapshot(hub)
 
     return app
 

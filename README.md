@@ -52,7 +52,7 @@ STEREO_HUB_HOST=192.168.1.50 .venv/bin/stereo-hub
 
 | Variable | Default | |
 | --- | --- | --- |
-| `STEREO_HUB_HOST` | *(discover)* | The hub's IP address. Strongly recommended: give the hub a DHCP reservation and set this. |
+| `STEREO_HUB_HOST` | *(discover)* | The hub's IP address, e.g. `192.168.1.50`. Strongly recommended: give the hub a DHCP reservation and set this. The service logs whether it connected; `docker logs` shows it. |
 | `PORT` | `8080` | Port the service listens on. |
 | `BIND_HOST` | `0.0.0.0` | Address the service listens on. |
 | `LOG_LEVEL` | `info` | |

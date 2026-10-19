@@ -12,6 +12,8 @@ SOURCES = (Source(0, "Streaming"), Source(1, "HDMI"), Source(2, "Optical"))
 class FakeHub:
     """Applies commands to its state immediately, as a confirmed hub would."""
 
+    host = "192.0.2.10"
+
     def __init__(self, **state) -> None:
         defaults = dict(
             available=True, power=False, volume=20, sources=SOURCES, source=SOURCES[0]
@@ -103,7 +105,11 @@ def test_index_page(client: TestClient) -> None:
 
 
 def test_healthz(client: TestClient) -> None:
-    assert client.get("/healthz").json() == {"status": "ok", "hub_available": True}
+    assert client.get("/healthz").json() == {
+        "status": "ok",
+        "hub_host": "192.0.2.10",
+        "hub_available": True,
+    }
 
 
 def test_state(client: TestClient) -> None:
@@ -112,6 +118,7 @@ def test_state(client: TestClient) -> None:
     assert body["volume"] == 20
     assert body["source"] == {"index": 0, "name": "Streaming"}
     assert [s["name"] for s in body["sources"]] == ["Streaming", "HDMI", "Optical"]
+    assert body["host"] == "192.0.2.10"
 
 
 def test_power(client: TestClient, hub: FakeHub) -> None:
@@ -164,3 +171,23 @@ def test_hub_offline_is_503() -> None:
     with TestClient(create_app(hub)) as c:
         res = c.put("/api/power", json={"on": True})
     assert res.status_code == 503
+
+
+def test_connection_changes_are_logged(caplog) -> None:
+    hub = FakeHub(available=False)
+    with caplog.at_level("INFO", logger="stereo_hub.app"), TestClient(create_app(hub)):
+        hub._set(available=True)
+        hub._set(volume=30)  # no change in availability: not logged again
+        hub._set(available=False)
+    messages = [r.getMessage() for r in caplog.records]
+    assert "connecting to hub at 192.0.2.10" in messages
+    assert "connected to hub at 192.0.2.10" in messages
+    assert sum("not reachable" in m for m in messages) == 1
+
+
+@pytest.mark.parametrize("host", ["<hub-ip>", "192.168.x.x y", "a/b"])
+def test_placeholder_host_is_rejected(monkeypatch, host) -> None:
+    monkeypatch.setenv("STEREO_HUB_HOST", host)
+    with pytest.raises(RuntimeError, match="not a hostname or IP"):
+        with TestClient(create_app()):
+            pass

@@ -125,7 +125,7 @@ async function call(method, path, body) {
 function render(s) {
   state = s;
   const live = s.available;
-  $("conn").textContent = live ? "connected" : "hub offline";
+  $("conn").textContent = live ? "connected" : `hub offline (${s.host})`;
   $("conn").className = live ? "ok" : "bad";
   if (s.model) $("title").textContent = s.model;
 
