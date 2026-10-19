@@ -191,3 +191,14 @@ def test_placeholder_host_is_rejected(monkeypatch, host) -> None:
     with pytest.raises(RuntimeError, match="not a hostname or IP"):
         with TestClient(create_app()):
             pass
+
+
+def test_get_volume_and_source(client: TestClient) -> None:
+    assert client.get("/api/volume").json() == {"level": 20}
+    assert client.get("/api/source").json() == {"index": 0, "name": "Streaming"}
+
+
+def test_get_volume_and_source_before_hub_reports() -> None:
+    with TestClient(create_app(FakeHub(volume=None, source=None))) as c:
+        assert c.get("/api/volume").json() == {"level": None}
+        assert c.get("/api/source").json() == {"index": None, "name": None}

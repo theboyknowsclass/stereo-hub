@@ -50,7 +50,14 @@
   #sources { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; }
   #sources button.active { background: var(--accent); border-color: var(--accent); color: var(--accent-fg);
     font-weight: 600; }
-  #np { color: var(--muted); font-size: .9rem; margin-top: 12px; min-height: 1.4em; }
+  .now { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; text-align: center; }
+  .now .k { display: block; font-size: .75rem; text-transform: uppercase; letter-spacing: .06em;
+    color: var(--muted); margin-bottom: 2px; }
+  .now .v { font-size: 1.15rem; font-weight: 650; font-variant-numeric: tabular-nums;
+    overflow-wrap: anywhere; }
+  #nowPower.on { color: var(--on); }
+  #np { color: var(--muted); font-size: .9rem; text-align: center; margin-top: 10px; }
+  #np:empty { display: none; }
   #toast { position: fixed; left: 16px; right: 16px; bottom: 16px; max-width: 408px; margin: 0 auto;
     background: var(--err); color: #fff; padding: 12px 14px; border-radius: 10px; font-size: .9rem;
     opacity: 0; transform: translateY(8px); transition: .2s; pointer-events: none; }
@@ -63,6 +70,15 @@
     <h1 id="title">Stereo Hub</h1>
     <span id="conn">connecting…</span>
   </header>
+
+  <section aria-label="Now">
+    <div class="now">
+      <div><span class="k">Power</span><span class="v" id="nowPower">–</span></div>
+      <div><span class="k">Input</span><span class="v" id="nowInput">–</span></div>
+      <div><span class="k">Volume</span><span class="v" id="nowVol">–</span></div>
+    </div>
+    <div id="np"></div>
+  </section>
 
   <section>
     <button id="power" disabled>
@@ -86,7 +102,6 @@
   <section>
     <h2>Input</h2>
     <div id="sources"></div>
-    <div id="np"></div>
   </section>
 </main>
 <div id="toast" role="status"></div>
@@ -128,6 +143,11 @@ function render(s) {
   $("conn").textContent = live ? "connected" : `hub offline (${s.host})`;
   $("conn").className = live ? "ok" : "bad";
   if (s.model) $("title").textContent = s.model;
+
+  $("nowPower").textContent = s.power ? "On" : s.power === false ? "Off" : "–";
+  $("nowPower").classList.toggle("on", s.power === true);
+  $("nowInput").textContent = s.source?.name ?? "–";
+  $("nowVol").textContent = s.volume ?? "–";
 
   const p = $("power");
   p.disabled = !live || s.power === null;

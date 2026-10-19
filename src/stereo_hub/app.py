@@ -217,6 +217,17 @@ def create_app(client: HubClient | None = None) -> FastAPI:
         await hub.async_set_power(body.on)
         return snapshot(hub)
 
+    @app.get("/api/volume")
+    async def get_volume(request: Request) -> dict[str, Any]:
+        """`level` is null until the hub has reported it."""
+        return {"level": hub_of(request).state.volume}
+
+    @app.get("/api/source")
+    async def get_source(request: Request) -> dict[str, Any]:
+        """The current input; `index` and `name` are null until the hub has reported it."""
+        source = hub_of(request).state.source
+        return {"index": source.index, "name": source.name} if source else {"index": None, "name": None}
+
     @app.put("/api/volume")
     async def put_volume(request: Request, body: VolumeBody) -> dict[str, Any]:
         hub = hub_of(request)

@@ -9,7 +9,7 @@ The hub protocol is handled by [aiolibresync](https://github.com/drsound/aiolibr
 This service holds one connection open, keeps the hub's state current from its
 own push messages, and exposes that over HTTP:
 
-- a phone-friendly web page at `/` with power, volume and input
+- a phone-friendly web page at `/` that shows and controls power, volume and input
 - a JSON API at `/api/...` (interactive docs at `/docs`)
 - a one-shot URL for a Flic button (or anything else that can fetch a URL)
   that turns the hub on and switches input
@@ -100,7 +100,9 @@ means the phone has to be on your home network.
 
 | Method | Path | Body | |
 | --- | --- | --- | --- |
-| `GET` | `/api/state` | | Current state |
+| `GET` | `/api/state` | | Current state: power, volume, input, inputs, playback |
+| `GET` | `/api/volume` | | `{"level": 56}` |
+| `GET` | `/api/source` | | `{"index": 6, "name": "HDMI"}` |
 | `PUT` | `/api/power` | `{"on": true}` | |
 | `PUT` | `/api/volume` | `{"level": 30}` | 0–100 |
 | `PUT` | `/api/source` | `{"index": 1}` or `{"name": "HDMI"}` | |
