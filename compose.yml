@@ -1,0 +1,12 @@
+# Example deployment. STEREO_HUB_HOST is the hub's IP address; give the hub a
+# DHCP reservation so it does not move.
+services:
+  stereo-hub:
+    image: ${COMPOSE_IMAGE_STEREO_HUB:-ghcr.io/theboyknowsclass/stereo-hub:latest}
+    container_name: stereo-hub
+    environment:
+      STEREO_HUB_HOST: ${STEREO_HUB_HOST:?set STEREO_HUB_HOST to the hub's IP}
+      TZ: ${TZ:-UTC}
+    ports:
+      - "8080:8080"
+    restart: unless-stopped

@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#111214">
+<title>Stereo Hub</title>
+<style>
+  :root {
+    --bg: #f4f4f2; --card: #ffffff; --fg: #1b1c1e; --muted: #6b6e73;
+    --line: #dcddd9; --accent: #2f6fe4; --accent-fg: #fff; --on: #1f9d55; --err: #c0392b;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #111214; --card: #1b1c1f; --fg: #ececea; --muted: #94979c;
+      --line: #2c2e32; --accent: #5b8ff0; --accent-fg: #0b0c0d; --on: #3ccf7c; --err: #ef6b5b;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg);
+    font: 16px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif;
+    -webkit-tap-highlight-color: transparent;
+  }
+  main { max-width: 440px; margin: 0 auto; padding: 20px 16px 40px; }
+  header { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 16px; }
+  h1 { font-size: 1.25rem; margin: 0; font-weight: 650; }
+  #conn { font-size: .85rem; color: var(--muted); }
+  #conn::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+    background: var(--muted); margin-right: 6px; vertical-align: 1px; }
+  #conn.ok::before { background: var(--on); }
+  #conn.bad::before { background: var(--err); }
+  section { background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+    padding: 16px; margin-bottom: 12px; }
+  h2 { font-size: .8rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted);
+    margin: 0 0 12px; font-weight: 600; }
+  button { font: inherit; color: inherit; cursor: pointer; border-radius: 10px;
+    border: 1px solid var(--line); background: transparent; padding: 12px; min-height: 48px; }
+  button:disabled { opacity: .45; cursor: default; }
+  button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  #power { width: 100%; font-size: 1.1rem; font-weight: 600; display: flex; align-items: center;
+    justify-content: center; gap: 10px; }
+  #power.on { background: var(--on); border-color: var(--on); color: #fff; }
+  #power svg { width: 22px; height: 22px; }
+  .vol { display: grid; grid-template-columns: 48px 1fr 48px; gap: 10px; align-items: center; }
+  .vol button { padding: 0; font-size: 1.4rem; }
+  #volval { text-align: center; font-size: 2rem; font-weight: 650; font-variant-numeric: tabular-nums;
+    margin-bottom: 8px; }
+  input[type=range] { width: 100%; accent-color: var(--accent); height: 32px; }
+  #sources { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; }
+  #sources button.active { background: var(--accent); border-color: var(--accent); color: var(--accent-fg);
+    font-weight: 600; }
+  #np { color: var(--muted); font-size: .9rem; margin-top: 12px; min-height: 1.4em; }
+  #toast { position: fixed; left: 16px; right: 16px; bottom: 16px; max-width: 408px; margin: 0 auto;
+    background: var(--err); color: #fff; padding: 12px 14px; border-radius: 10px; font-size: .9rem;
+    opacity: 0; transform: translateY(8px); transition: .2s; pointer-events: none; }
+  #toast.show { opacity: 1; transform: none; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1 id="title">Stereo Hub</h1>
+    <span id="conn">connecting…</span>
+  </header>
+
+  <section>
+    <button id="power" disabled>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+        <path d="M12 3v9"/><path d="M6.3 6.8a8 8 0 1 0 11.4 0"/>
+      </svg>
+      <span id="powerlabel">Power</span>
+    </button>
+  </section>
+
+  <section>
+    <h2>Volume</h2>
+    <div id="volval">–</div>
+    <div class="vol">
+      <button id="voldown" aria-label="Volume down" disabled>−</button>
+      <input id="vol" type="range" min="0" max="100" step="1" value="0" aria-label="Volume" disabled>
+      <button id="volup" aria-label="Volume up" disabled>+</button>
+    </div>
+  </section>
+
+  <section>
+    <h2>Input</h2>
+    <div id="sources"></div>
+    <div id="np"></div>
+  </section>
+</main>
+<div id="toast" role="status"></div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let state = null;
+let dragging = false;
+let toastTimer;
+
+function toast(msg) {
+  $("toast").textContent = msg;
+  $("toast").classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => $("toast").classList.remove("show"), 4000);
+}
+
+async function call(method, path, body) {
+  try {
+    const res = await fetch(path, {
+      method,
+      headers: body ? { "Content-Type": "application/json" } : {},
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(typeof err.detail === "string" ? err.detail : res.statusText);
+    }
+    render(await res.json());
+  } catch (e) {
+    toast(e.message);
+    if (state) render(state);
+  }
+}
+
+function render(s) {
+  state = s;
+  const live = s.available;
+  $("conn").textContent = live ? "connected" : "hub offline";
+  $("conn").className = live ? "ok" : "bad";
+  if (s.model) $("title").textContent = s.model;
+
+  const p = $("power");
+  p.disabled = !live || s.power === null;
+  p.classList.toggle("on", s.power === true);
+  $("powerlabel").textContent = s.power ? "On" : s.power === false ? "Off" : "Power";
+
+  const hasVol = live && s.volume !== null;
+  for (const id of ["vol", "volup", "voldown"]) $(id).disabled = !hasVol;
+  if (!dragging) {
+    $("vol").value = s.volume ?? 0;
+    $("volval").textContent = s.volume ?? "–";
+  }
+
+  const box = $("sources");
+  box.replaceChildren(...s.sources.map((src) => {
+    const b = document.createElement("button");
+    b.textContent = src.name;
+    b.disabled = !live;
+    b.classList.toggle("active", s.source?.index === src.index);
+    b.onclick = () => call("PUT", "/api/source", { index: src.index });
+    return b;
+  }));
+
+  const np = s.now_playing;
+  $("np").textContent = np && (np.title || np.artist)
+    ? [np.title, np.artist].filter(Boolean).join(" — ")
+    : "";
+}
+
+$("power").onclick = () => call("PUT", "/api/power", { on: !state?.power });
+
+const vol = $("vol");
+vol.addEventListener("input", () => { dragging = true; $("volval").textContent = vol.value; });
+vol.addEventListener("change", () => {
+  dragging = false;
+  call("PUT", "/api/volume", { level: Number(vol.value) });
+});
+function nudge(delta) {
+  if (state?.volume == null) return;
+  const level = Math.max(0, Math.min(100, state.volume + delta));
+  $("volval").textContent = level;
+  call("PUT", "/api/volume", { level });
+}
+$("volup").onclick = () => nudge(2);
+$("voldown").onclick = () => nudge(-2);
+
+function connect() {
+  const es = new EventSource("/api/events");
+  es.onmessage = (e) => render(JSON.parse(e.data));
+  es.onerror = () => {
+    $("conn").textContent = "reconnecting…";
+    $("conn").className = "bad";
+  };
+}
+connect();
+</script>
+</body>
+</html>
