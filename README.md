@@ -29,13 +29,26 @@ docker run -d --name stereo-hub -p 8080:8080 \
   ghcr.io/theboyknowsclass/stereo-hub:latest
 ```
 
-Or with the included [compose.yml](compose.yml):
+Or with the included [compose.yml](compose.yml): copy
+[.env.example](.env.example) to `.env`, set your hub's address (and a port, if
+8080 is taken), then:
 
 ```bash
-STEREO_HUB_HOST=192.168.1.50 docker compose up -d
+docker compose up -d
 ```
 
 Then open `http://<docker-host>:8080/`.
+
+### Finding the hub's address
+
+Your router's list of connected devices is the easiest place to look. The hub
+usually shows up under the name you gave it in the vendor's app, or as
+"LibreWireless". If your network is split into VLANs, the hub may be on a
+different subnet from your PC. The service only needs to be able to reach it.
+
+If the page says **hub offline (address)**, the service can't reach that
+address on TCP 50006 and 7777. `docker logs stereo-hub` shows each connect
+attempt.
 
 Images are built for `linux/amd64` and `linux/arm64` on every push to `main`
 (`:latest`, `:sha-<short>`) and on `v*` tags (`:1.2.3`).
@@ -53,7 +66,8 @@ STEREO_HUB_HOST=192.168.1.50 .venv/bin/stereo-hub
 | Variable | Default | |
 | --- | --- | --- |
 | `STEREO_HUB_HOST` | *(discover)* | The hub's IP address, e.g. `192.168.1.50`. Strongly recommended: give the hub a DHCP reservation and set this. The service logs whether it connected; `docker logs` shows it. |
-| `PORT` | `8080` | Port the service listens on. |
+| `STEREO_HUB_PORT` | `8080` | Host port in [compose.yml](compose.yml). |
+| `PORT` | `8080` | Port the service listens on inside the container. |
 | `BIND_HOST` | `0.0.0.0` | Address the service listens on. |
 | `LOG_LEVEL` | `info` | |
 

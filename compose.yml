@@ -8,5 +8,5 @@ services:
       STEREO_HUB_HOST: ${STEREO_HUB_HOST:?set STEREO_HUB_HOST to the hub's IP}
       TZ: ${TZ:-UTC}
     ports:
-      - "8080:8080"
+      - "${STEREO_HUB_PORT:-8080}:8080"
     restart: unless-stopped
