@@ -162,6 +162,13 @@ def test_button_action_power_only(client: TestClient, hub: FakeHub) -> None:
     assert hub.calls == [("power", True)]
 
 
+@pytest.mark.parametrize("method", ["GET", "POST"])
+def test_button_action_powers_off(client: TestClient, hub: FakeHub, method) -> None:
+    client.get("/api/actions/on")
+    assert client.request(method, "/api/actions/off").json()["power"] is False
+    assert hub.calls == [("power", True), ("power", False)]
+
+
 def test_button_action_unknown_source(client: TestClient) -> None:
     assert client.get("/api/actions/on/Phono").status_code == 404
 

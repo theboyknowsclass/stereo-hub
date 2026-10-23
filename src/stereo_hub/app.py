@@ -306,6 +306,13 @@ def create_app(client: HubClient | None = None) -> FastAPI:
                 await hub.async_select_source(index)
         return snapshot(hub)
 
+    @app.api_route("/api/actions/off", methods=["GET", "POST"])
+    async def action_off(request: Request) -> dict[str, Any]:
+        """Turn the hub off."""
+        hub = hub_of(request)
+        await hub.async_set_power(False)
+        return snapshot(hub)
+
     return app
 
 
