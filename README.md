@@ -93,6 +93,9 @@ This turns the hub on, if it isn't already, and switches to the input named
 which `GET /api/state` or the web page shows. The input's index works too.
 Leave the input off (`/api/actions/on`) to only turn the hub on.
 
+To turn the hub off from another button (or a double click or hold on the same one),
+use `http://<docker-host>:8080/api/actions/off`, also with `GET` or `POST`.
+
 The request is sent by whatever runs the Flic action. For the phone app that
 means the phone has to be on your home network.
 
@@ -108,6 +111,7 @@ means the phone has to be on your home network.
 | `PUT` | `/api/source` | `{"index": 1}` or `{"name": "HDMI"}` | |
 | `POST` | `/api/media/{play,pause,stop,next,previous}` | | Streaming input only |
 | `GET`/`POST` | `/api/actions/on[/{input}]` | | Power on and switch input, for buttons |
+| `GET`/`POST` | `/api/actions/off` | | Power off, for buttons |
 | `GET` | `/api/events` | | Server-sent events: the state on connect and on every change |
 | `GET` | `/healthz` | | Liveness, plus whether the hub is connected |
 
